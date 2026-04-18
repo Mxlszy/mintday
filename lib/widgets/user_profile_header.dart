@@ -1,124 +1,481 @@
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
 import '../core/user_profile_model.dart';
 import '../core/utils.dart';
+import '../models/avatar_config.dart';
+import 'avatar/pixel_avatar_painter.dart';
 
-/// 主控台顶部：像素头像 + 昵称/欢迎语 + 通知。
 class UserProfileHeader extends StatelessWidget {
-  final UserProfileModel profile;
-  final String dateLabel;
-
-  /// 若传入则覆盖 [UserProfileModel.welcomeMessage]（例如首页动态问候）。
-  final String? headlineGreeting;
-  final VoidCallback? onNotificationTap;
-
   const UserProfileHeader({
     super.key,
     required this.profile,
     required this.dateLabel,
     this.headlineGreeting,
     this.onNotificationTap,
+    this.onAvatarTap,
+    this.level = 1,
+    this.xpCurrent = 0,
+    this.xpMax = 100,
   });
+
+  final UserProfileModel profile;
+  final String dateLabel;
+  final String? headlineGreeting;
+  final VoidCallback? onNotificationTap;
+  final VoidCallback? onAvatarTap;
+  final int level;
+  final int xpCurrent;
+  final int xpMax;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _PixelAvatarFrame(
-              assetPath: profile.avatarAssetPath,
-              size: 56,
+      children: <Widget>[
+        _HeroPanelCard(
+          profile: profile,
+          onNotificationTap: onNotificationTap,
+          onAvatarTap: onAvatarTap,
+          level: level,
+          xpCurrent: xpCurrent,
+          xpMax: xpMax,
+        ),
+        const SizedBox(height: 10),
+        _BottomRow(dateLabel: dateLabel),
+      ],
+    );
+  }
+}
+
+class _HeroPanelCard extends StatelessWidget {
+  const _HeroPanelCard({
+    required this.profile,
+    this.onNotificationTap,
+    this.onAvatarTap,
+    required this.level,
+    required this.xpCurrent,
+    required this.xpMax,
+  });
+
+  final UserProfileModel profile;
+  final VoidCallback? onNotificationTap;
+  final VoidCallback? onAvatarTap;
+  final int level;
+  final int xpCurrent;
+  final int xpMax;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _HeaderPalette.current();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: palette.panelBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: palette.panelBorder),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: palette.panelShadow,
+            offset: const Offset(0, 10),
+            blurRadius: 24,
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          _AvatarFrame(
+            assetPath: profile.avatarAssetPath,
+            avatarConfig: profile.avatarConfig,
+            width: 80,
+            height: 100,
+            level: level,
+            onTap: onAvatarTap,
+            palette: palette,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: _StatBlock(
+              nickname: profile.nickname,
+              level: level,
+              xpCurrent: xpCurrent,
+              xpMax: xpMax,
+              palette: palette,
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    profile.nickname,
-                    style: AppTextStyle.h2.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.3,
-                      height: 1.1,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    headlineGreeting ?? profile.welcomeMessage,
-                    style: AppTextStyle.bodySmall.copyWith(
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+          ),
+          if (!kIsWeb && onNotificationTap != null) ...<Widget>[
+            const SizedBox(width: 10),
+            _NotifButton(onTap: onNotificationTap!, palette: palette),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AvatarFrame extends StatelessWidget {
+  const _AvatarFrame({
+    required this.assetPath,
+    required this.avatarConfig,
+    required this.width,
+    required this.height,
+    required this.level,
+    required this.palette,
+    this.onTap,
+  });
+
+  final String? assetPath;
+  final AvatarConfig? avatarConfig;
+  final double width;
+  final double height;
+  final int level;
+  final VoidCallback? onTap;
+  final _HeaderPalette palette;
+
+  Widget _buildAvatar() {
+    final fallback = Center(
+      child: PixelAvatar(
+        config: avatarConfig ?? AvatarConfig.defaultConfig,
+        size: 82,
+      ),
+    );
+
+    if (avatarConfig != null) {
+      return fallback;
+    }
+
+    if (assetPath == null) {
+      return fallback;
+    }
+
+    return Image.asset(
+      assetPath!,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => fallback,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final frame = SizedBox(
+      width: width + 8,
+      height: height + 8,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              color: palette.avatarBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: palette.avatarBorder, width: 1.5),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14.5),
+              child: _buildAvatar(),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: palette.badgeBg,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: palette.panelBg, width: 1.5),
+              ),
+              child: Text(
+                'Lv.$level',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: palette.badgeFg,
+                  letterSpacing: 0.5,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (onTap == null) {
+      return frame;
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: frame,
+      ),
+    );
+  }
+}
+
+class _StatBlock extends StatelessWidget {
+  const _StatBlock({
+    required this.nickname,
+    required this.level,
+    required this.xpCurrent,
+    required this.xpMax,
+    required this.palette,
+  });
+
+  final String nickname;
+  final int level;
+  final int xpCurrent;
+  final int xpMax;
+  final _HeaderPalette palette;
+
+  bool get _isMax => xpMax > 0 && xpCurrent >= xpMax;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          nickname,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: palette.textSub,
+            letterSpacing: 0.1,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: <Widget>[
+            Text(
+              'Lv.',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: palette.textSub,
+                height: 1.15,
+              ),
+            ),
+            Text(
+              '$level',
+              style: TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.w900,
+                color: palette.textMain,
+                letterSpacing: -0.8,
+                height: 1.05,
+                shadows: <Shadow>[
+                  Shadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    offset: const Offset(0, 1),
+                    blurRadius: 0,
                   ),
                 ],
               ),
             ),
-            if (!kIsWeb) ...[
-              const SizedBox(width: 8),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: onNotificationTap,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppTheme.surface,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.primary, width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.shadowDark.withValues(alpha: 0.2),
-                          offset: const Offset(2, 2),
-                          blurRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.notifications_outlined,
-                      size: 20,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
+            if (_isMax) ...<Widget>[
+              const SizedBox(width: 6),
+              Text(
+                'MAX',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: palette.textHint,
+                  letterSpacing: 1.1,
                 ),
               ),
             ],
           ],
         ),
-        const SizedBox(height: AppTheme.spacingM),
+        const SizedBox(height: 10),
+        Container(height: 1, color: palette.divider),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Text(
+              'EXP',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: palette.textSub,
+                letterSpacing: 1.2,
+              ),
+            ),
+            Text(
+              '$xpCurrent / $xpMax',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: palette.textHint,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _PixelXpBar(
+          current: xpCurrent,
+          max: xpMax,
+          trackColor: palette.xpTrack,
+          trackBorderColor: palette.xpTrackBorder,
+          fillColor: palette.xpFill,
+          highlightColor: palette.xpHighlight,
+        ),
+      ],
+    );
+  }
+}
+
+class _PixelXpBar extends StatelessWidget {
+  const _PixelXpBar({
+    required this.current,
+    required this.max,
+    required this.trackColor,
+    required this.trackBorderColor,
+    required this.fillColor,
+    required this.highlightColor,
+  });
+
+  final int current;
+  final int max;
+  final Color trackColor;
+  final Color trackBorderColor;
+  final Color fillColor;
+  final Color highlightColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = max > 0 ? (current / max).clamp(0.0, 1.0) : 0.0;
+    return CustomPaint(
+      painter: _XpBarPainter(
+        progress: progress,
+        trackColor: trackColor,
+        trackBorderColor: trackBorderColor,
+        fillColor: fillColor,
+        highlightColor: highlightColor,
+      ),
+      child: const SizedBox(height: 10, width: double.infinity),
+    );
+  }
+}
+
+class _XpBarPainter extends CustomPainter {
+  const _XpBarPainter({
+    required this.progress,
+    required this.trackColor,
+    required this.trackBorderColor,
+    required this.fillColor,
+    required this.highlightColor,
+  });
+
+  final double progress;
+  final Color trackColor;
+  final Color trackBorderColor;
+  final Color fillColor;
+  final Color highlightColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const radius = Radius.circular(2);
+
+    final outerRect = RRect.fromLTRBR(
+      0.5,
+      0.5,
+      size.width - 0.5,
+      size.height - 0.5,
+      radius,
+    );
+
+    canvas.drawRRect(outerRect, Paint()..color = trackColor);
+
+    if (progress > 0.005) {
+      final fillWidth = (size.width - 1.0) * progress;
+      canvas.drawRRect(
+        RRect.fromLTRBR(0.5, 0.5, 0.5 + fillWidth, size.height - 0.5, radius),
+        Paint()..color = fillColor,
+      );
+
+      if (fillWidth > 4) {
+        canvas.drawRect(
+          Rect.fromLTWH(1.5, 1.5, fillWidth - 2, (size.height - 3) * 0.28),
+          Paint()..color = highlightColor,
+        );
+      }
+    }
+
+    canvas.drawRRect(
+      outerRect,
+      Paint()
+        ..color = trackBorderColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _XpBarPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.trackBorderColor != trackBorderColor ||
+        oldDelegate.fillColor != fillColor ||
+        oldDelegate.highlightColor != highlightColor;
+  }
+}
+
+class _BottomRow extends StatelessWidget {
+  const _BottomRow({required this.dateLabel});
+
+  final String dateLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _HeaderPalette.current();
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(AppTheme.radiusS),
-            border: Border.all(color: AppTheme.border, width: 1.5),
+            color: palette.dateTagBg,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: palette.dateTagBorder),
           ),
           child: Text(
             dateLabel,
-            style: AppTextStyle.caption.copyWith(
-              color: AppTheme.textSecondary,
+            style: TextStyle(
+              fontSize: 11,
               fontWeight: FontWeight.w700,
+              color: palette.textSub,
+              letterSpacing: 0.2,
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          AppUtils.randomEncouragement(),
-          style: AppTextStyle.bodySmall.copyWith(
-            fontWeight: FontWeight.w600,
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            AppUtils.randomEncouragement(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: palette.textHint,
+              letterSpacing: 0.1,
+            ),
           ),
         ),
       ],
@@ -126,46 +483,32 @@ class UserProfileHeader extends StatelessWidget {
   }
 }
 
-/// 方形圆角头像 + 像素化阶梯边框；无资源时绘制内置像素角色。
-class _PixelAvatarFrame extends StatelessWidget {
-  final String? assetPath;
-  final double size;
+class _NotifButton extends StatelessWidget {
+  const _NotifButton({required this.onTap, required this.palette});
 
-  const _PixelAvatarFrame({
-    required this.assetPath,
-    required this.size,
-  });
+  final VoidCallback onTap;
+  final _HeaderPalette palette;
 
   @override
   Widget build(BuildContext context) {
-    final inner = size - 10;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _PixelatedBorderPainter(
-          cornerRadius: 10,
-          step: 3,
-          outerColor: AppTheme.primary,
-          midColor: AppTheme.surface,
-          innerColor: AppTheme.accentStrong,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: inner,
-              height: inner,
-              child: assetPath != null
-                  ? Image.asset(
-                      assetPath!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          CustomPaint(painter: _MintPixelAvatarPainter()),
-                    )
-                  : CustomPaint(painter: _MintPixelAvatarPainter()),
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: palette.avatarBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: palette.avatarBorder),
+          ),
+          child: Icon(
+            Icons.notifications_outlined,
+            size: 18,
+            color: palette.textSub,
           ),
         ),
       ),
@@ -173,144 +516,65 @@ class _PixelAvatarFrame extends StatelessWidget {
   }
 }
 
-/// 在头像外缘绘制「锯齿台阶」式描边，模拟像素画边框。
-class _PixelatedBorderPainter extends CustomPainter {
-  final double cornerRadius;
-  final double step;
-  final Color outerColor;
-  final Color midColor;
-  final Color innerColor;
-
-  _PixelatedBorderPainter({
-    required this.cornerRadius,
-    required this.step,
-    required this.outerColor,
-    required this.midColor,
-    required this.innerColor,
+class _HeaderPalette {
+  const _HeaderPalette({
+    required this.panelBg,
+    required this.panelBorder,
+    required this.panelShadow,
+    required this.avatarBg,
+    required this.avatarBorder,
+    required this.divider,
+    required this.xpTrack,
+    required this.xpTrackBorder,
+    required this.xpFill,
+    required this.xpHighlight,
+    required this.textMain,
+    required this.textSub,
+    required this.textHint,
+    required this.badgeBg,
+    required this.badgeFg,
+    required this.dateTagBg,
+    required this.dateTagBorder,
   });
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final r = cornerRadius.clamp(0.0, math.min(w, h) / 2);
+  final Color panelBg;
+  final Color panelBorder;
+  final Color panelShadow;
+  final Color avatarBg;
+  final Color avatarBorder;
+  final Color divider;
+  final Color xpTrack;
+  final Color xpTrackBorder;
+  final Color xpFill;
+  final Color xpHighlight;
+  final Color textMain;
+  final Color textSub;
+  final Color textHint;
+  final Color badgeBg;
+  final Color badgeFg;
+  final Color dateTagBg;
+  final Color dateTagBorder;
 
-    void strokePolyline(List<Offset> pts, Paint paint, {bool close = false}) {
-      final path = Path()..moveTo(pts.first.dx, pts.first.dy);
-      for (var i = 1; i < pts.length; i++) {
-        path.lineTo(pts[i].dx, pts[i].dy);
-      }
-      if (close) path.close();
-      canvas.drawPath(path, paint);
-    }
-
-    // 外圈粗线（直角阶梯近似圆角矩形）
-    final outer = Paint()
-      ..color = outerColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeJoin = StrokeJoin.miter;
-
-    final mid = Paint()
-      ..color = midColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeJoin = StrokeJoin.miter;
-
-    final inner = Paint()
-      ..color = innerColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeJoin = StrokeJoin.miter;
-
-    List<Offset> steppedRect(double inset) {
-      final x0 = inset;
-      final y0 = inset;
-      final x1 = w - inset;
-      final y1 = h - inset;
-      final s = step;
-      return [
-        Offset(x0 + r, y0),
-        Offset(x1 - r, y0),
-        Offset(x1 - r + s, y0 + s),
-        Offset(x1, y0 + r),
-        Offset(x1, y1 - r),
-        Offset(x1 - s, y1 - r + s),
-        Offset(x1 - r, y1),
-        Offset(x0 + r, y1),
-        Offset(x0 + r - s, y1 - s),
-        Offset(x0, y1 - r),
-        Offset(x0, y0 + r),
-        Offset(x0 + s, y0 + r - s),
-        Offset(x0 + r, y0),
-      ];
-    }
-
-    strokePolyline(steppedRect(1.5), outer, close: true);
-    strokePolyline(steppedRect(3.5), mid, close: true);
-    strokePolyline(steppedRect(5), inner, close: true);
+  factory _HeaderPalette.current() {
+    final isDark = AppTheme.isDarkMode;
+    return _HeaderPalette(
+      panelBg: AppTheme.surface,
+      panelBorder: AppTheme.border,
+      panelShadow: AppTheme.shadowDark.withValues(alpha: isDark ? 0.28 : 0.06),
+      avatarBg: AppTheme.surfaceVariant,
+      avatarBorder: AppTheme.border,
+      divider: AppTheme.divider,
+      xpTrack: AppTheme.surfaceDeep,
+      xpTrackBorder: AppTheme.border,
+      xpFill: isDark ? AppTheme.accent : AppTheme.textPrimary,
+      xpHighlight: Colors.white.withValues(alpha: isDark ? 0.24 : 0.16),
+      textMain: AppTheme.textPrimary,
+      textSub: AppTheme.textSecondary,
+      textHint: AppTheme.textHint,
+      badgeBg: isDark ? AppTheme.accentStrong : AppTheme.textPrimary,
+      badgeFg: Colors.white,
+      dateTagBg: AppTheme.surfaceVariant,
+      dateTagBorder: AppTheme.border,
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant _PixelatedBorderPainter oldDelegate) {
-    return oldDelegate.outerColor != outerColor ||
-        oldDelegate.midColor != midColor ||
-        oldDelegate.innerColor != innerColor ||
-        oldDelegate.cornerRadius != cornerRadius ||
-        oldDelegate.step != step;
-  }
-}
-
-/// 内置 8-bit 风格 Mint 小人（不依赖外部图片）。
-class _MintPixelAvatarPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final n = 8;
-    final cell = size.width / n;
-    final bg = Paint()..color = AppTheme.surfaceDeep;
-    canvas.drawRect(Offset.zero & size, bg);
-
-    void px(int gx, int gy, Color c) {
-      final paint = Paint()..color = c;
-      canvas.drawRect(
-        Rect.fromLTWH(gx * cell, gy * cell, cell + 0.5, cell + 0.5),
-        paint,
-      );
-    }
-
-    const skin = Color(0xFFFFD4A8);
-    final hair = AppTheme.primaryLight;
-    final eye = AppTheme.primary;
-    final shirt = AppTheme.bonusMint;
-    final blush = AppTheme.bonusRose.withValues(alpha: 0.55);
-
-    // 头发
-    for (var x = 2; x <= 5; x++) {
-      px(x, 1, hair);
-    }
-    px(1, 2, hair);
-    px(6, 2, hair);
-    // 脸
-    for (var y = 2; y <= 4; y++) {
-      for (var x = 2; x <= 5; x++) {
-        if (x == 1 || x == 6) continue;
-        px(x, y, skin);
-      }
-    }
-    px(2, 3, eye);
-    px(5, 3, eye);
-    px(2, 4, blush);
-    px(5, 4, blush);
-    px(3, 5, skin);
-    px(4, 5, skin);
-    // 身体
-    for (var x = 2; x <= 5; x++) {
-      for (var y = 6; y <= 7; y++) {
-        px(x, y, shirt);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

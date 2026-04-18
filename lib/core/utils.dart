@@ -26,12 +26,13 @@ class AppUtils {
     final status = isTodayChecked
         ? MintGreetingTodayStatus.completedToday
         : (isStreakBroken
-            ? MintGreetingTodayStatus.streakBroken
-            : MintGreetingTodayStatus.notChecked);
+              ? MintGreetingTodayStatus.streakBroken
+              : MintGreetingTodayStatus.notChecked);
     final tier = _greetingStreakTier(streak);
     final pool = AppConstants.dynamicGreetings[tier]![status]!;
-    final index =
-        Random(DateTime.now().millisecondsSinceEpoch).nextInt(pool.length);
+    final index = Random(
+      DateTime.now().millisecondsSinceEpoch,
+    ).nextInt(pool.length);
     return pool[index];
   }
 
@@ -93,6 +94,26 @@ class AppUtils {
     final remainingMinutes = minutes % 60;
     if (remainingMinutes == 0) return '$hours 小时';
     return '$hours 小时 $remainingMinutes 分钟';
+  }
+
+  static String formatCurrency(
+    num amount, {
+    bool signed = false,
+    bool absolute = false,
+  }) {
+    final value = absolute ? amount.abs() : amount.toDouble();
+    final prefix = signed
+        ? (value > 0 ? '+' : (value < 0 ? '-' : ''))
+        : (value < 0 ? '-' : '');
+    return '$prefix¥${value.abs().toStringAsFixed(2)}';
+  }
+
+  static String monthLabel(DateTime date) {
+    return DateFormat('yyyy年M月').format(date);
+  }
+
+  static String fullDateLabel(DateTime date) {
+    return DateFormat('yyyy年M月d日').format(date);
   }
 
   static bool isSameDay(DateTime a, DateTime b) {

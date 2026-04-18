@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+
 import '../core/neumorphic.dart';
+import '../core/page_transitions.dart';
 import '../core/pixel_icons.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils.dart';
 import '../models/goal.dart';
 import '../pages/goal/goal_detail_page.dart';
 import 'pixel_progress_bar.dart';
+import 'touch_scale_wrapper.dart';
 
 class GoalCard extends StatelessWidget {
   final Goal goal;
@@ -24,98 +27,98 @@ class GoalCard extends StatelessWidget {
     final totalSteps = goal.steps.length;
     final completedSteps = goal.completedStepCount;
     final metaText = totalSteps == 0
-        ? '持续记录中'
-        : '$completedSteps / $totalSteps 步';
+        ? '鎸佺画璁板綍涓?'
+        : '$completedSteps / $totalSteps 姝?';
 
-    return NeuContainer(
-      margin: const EdgeInsets.only(bottom: AppTheme.spacingM),
-      padding: const EdgeInsets.all(AppTheme.spacingL),
-      borderRadius: AppTheme.radiusL,
+    return TouchScaleWrapper(
       onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => GoalDetailPage(goalId: goal.id),
-          ),
-        );
+        Navigator.of(
+          context,
+        ).push(sharedAxisRoute(GoalDetailPage(goalId: goal.id)));
       },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      goal.title,
-                      style: AppTextStyle.h3,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(goal.category.label, style: AppTextStyle.caption),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppTheme.spacingM),
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryMuted,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusM),
-                ),
-                child: Center(
-                  child: PixelIcon(
-                    icon: PixelIcons.forCategory(goal.category.value),
-                    size: 32,
+      child: NeuContainer(
+        margin: const EdgeInsets.only(bottom: AppTheme.spacingM),
+        padding: const EdgeInsets.all(AppTheme.spacingL),
+        borderRadius: AppTheme.radiusL,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        goal.title,
+                        style: AppTextStyle.h3,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(goal.category.label, style: AppTextStyle.caption),
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppTheme.spacingM),
-          Wrap(
-            spacing: AppTheme.spacingS,
-            runSpacing: AppTheme.spacingS,
-            children: [
-              _MetaPill(label: metaText, icon: PixelIcons.chart),
-              _MetaPill(
-                label: AppUtils.streakText(streakDays),
-                icon: PixelIcons.fire,
-                color: streakDays > 0 ? AppTheme.accentStrong : null,
-              ),
-              _MetaPill(
-                label: isCheckedToday ? '今日已记录' : '等待今日记录',
-                icon: isCheckedToday ? PixelIcons.check : PixelIcons.clock,
-                emphasis: isCheckedToday,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppTheme.spacingL),
-          Row(
-            children: [
-              Expanded(
-                child: PixelProgressBar(
-                  progress: goal.progress,
-                  height: 10,
-                  blockCount: 12,
-                  activeColor: AppTheme.primary,
-                  inactiveColor: AppTheme.surfaceDeep,
+                const SizedBox(width: AppTheme.spacingM),
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryMuted,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                  ),
+                  child: Center(
+                    child: PixelIcon(
+                      icon: PixelIcons.forCategory(goal.category.value),
+                      size: 32,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppTheme.spacingM),
-              Text(
-                AppUtils.progressText(goal.progress),
-                style: AppTextStyle.body.copyWith(
-                  fontWeight: FontWeight.w700,
+              ],
+            ),
+            const SizedBox(height: AppTheme.spacingM),
+            Wrap(
+              spacing: AppTheme.spacingS,
+              runSpacing: AppTheme.spacingS,
+              children: [
+                _MetaPill(label: metaText, icon: PixelIcons.chart),
+                _MetaPill(
+                  label: AppUtils.streakText(streakDays),
+                  icon: PixelIcons.fire,
+                  color: streakDays > 0 ? AppTheme.accentStrong : null,
                 ),
-              ),
-            ],
-          ),
-        ],
+                _MetaPill(
+                  label: isCheckedToday ? '浠婃棩宸茶褰?' : '绛夊緟浠婃棩璁板綍',
+                  icon: isCheckedToday ? PixelIcons.check : PixelIcons.clock,
+                  emphasis: isCheckedToday,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppTheme.spacingL),
+            Row(
+              children: [
+                Expanded(
+                  child: PixelProgressBar(
+                    progress: goal.progress,
+                    height: 10,
+                    blockCount: 12,
+                    activeColor: AppTheme.primary,
+                    inactiveColor: AppTheme.surfaceDeep,
+                  ),
+                ),
+                const SizedBox(width: AppTheme.spacingM),
+                Text(
+                  AppUtils.progressText(goal.progress),
+                  style: AppTextStyle.body.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -148,10 +151,7 @@ class _MetaPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          PixelIcon(
-            icon: icon,
-            size: 12,
-          ),
+          PixelIcon(icon: icon, size: 12),
           const SizedBox(width: 8),
           Text(
             label,

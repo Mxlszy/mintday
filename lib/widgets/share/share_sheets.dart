@@ -4,17 +4,20 @@ import 'package:provider/provider.dart';
 import 'package:screenshot/screenshot.dart';
 
 import '../../core/journey_insights.dart';
-import '../../core/utils.dart';
+import '../../core/page_transitions.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils.dart';
 import '../../models/achievement.dart';
 import '../../models/goal.dart';
+import '../../models/nft_asset.dart';
+import '../../pages/wallet/nft_detail_page.dart';
 import '../../providers/check_in_provider.dart';
 import '../../providers/goal_provider.dart';
+import '../../providers/nft_provider.dart';
 import '../../services/share_export_service.dart';
 import '../../services/user_profile_prefs.dart';
 import 'pixel_share_card.dart';
 
-/// 成就解锁后的分享半屏（含 [Screenshot] 预览 + 系统分享）。
 Future<void> showAchievementShareSheet(
   BuildContext context, {
   required List<AchievementId> achievementIds,
@@ -28,7 +31,7 @@ Future<void> showAchievementShareSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _AchievementShareSheetBody(
+    builder: (_) => _AchievementShareSheetBody(
       nickname: nickname,
       achievementIds: achievementIds,
     ),
@@ -49,20 +52,23 @@ class _AchievementShareSheetBody extends StatefulWidget {
       _AchievementShareSheetBodyState();
 }
 
-class _AchievementShareSheetBodyState extends State<_AchievementShareSheetBody> {
+class _AchievementShareSheetBodyState
+    extends State<_AchievementShareSheetBody> {
   final _shot = ScreenshotController();
   bool _capturing = false;
+  bool _minting = false;
 
   Future<void> _sharePng() async {
     if (_capturing) return;
     if (kIsWeb) {
       AppUtils.showSnackBar(
         context,
-        'Web 端暂不支持图片分享，请使用 Android / iOS / 桌面客户端。',
+        'Web 端暂不支持图片分享，请使用 Android、iOS 或桌面端。',
         isError: true,
       );
       return;
     }
+
     setState(() => _capturing = true);
     try {
       final bytes = await _shot.capture(
@@ -73,11 +79,45 @@ class _AchievementShareSheetBodyState extends State<_AchievementShareSheetBody> 
       await ShareExportService.sharePngBytes(
         bytes,
         'mintday_achievement_${DateTime.now().millisecondsSinceEpoch}',
-        text: '我在 MintDay 解锁了新成就',
+        text: '我在 MintDay 解锁了新的成就',
       );
     } finally {
       if (mounted) setState(() => _capturing = false);
     }
+  }
+
+  Future<void> _mintAchievementNft() async {
+    if (_minting) return;
+    setState(() => _minting = true);
+
+    final ids = [...widget.achievementIds]
+      ..sort((a, b) => a.name.compareTo(b.name));
+    final titles = ids
+        .map((id) => AchievementCatalog.byId[id]?.title ?? id.name)
+        .toList();
+    final single = ids.length == 1 ? AchievementCatalog.byId[ids.first] : null;
+
+    final asset = await context.read<NftProvider>().generateNftCard(
+      single?.title ?? '连锁成就解锁',
+      single?.subtitle ??
+          '一次点亮 ${ids.length} 项成就：${titles.take(2).join('、')}${ids.length > 2 ? ' 等' : ''}',
+      NftCategory.achievement,
+      ids.map((id) => id.name).join(','),
+    );
+
+    if (!mounted) return;
+    setState(() => _minting = false);
+
+    if (asset == null) {
+      AppUtils.showSnackBar(context, '生成 NFT 卡片失败，请稍后重试', isError: true);
+      return;
+    }
+
+    final navigator = Navigator.of(context, rootNavigator: true);
+    navigator.pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      navigator.push(sharedAxisRoute(NftDetailPage(assetId: asset.id)));
+    });
   }
 
   @override
@@ -103,33 +143,17 @@ class _AchievementShareSheetBodyState extends State<_AchievementShareSheetBody> 
         right: AppTheme.spacingL,
         bottom: AppTheme.spacingL + MediaQuery.paddingOf(context).bottom,
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.background,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXL)),
-          border: Border.all(color: AppTheme.border, width: 1.5),
-        ),
-        padding: const EdgeInsets.all(AppTheme.spacingL),
+      child: _SheetContainer(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            const _SheetHandle(),
             const SizedBox(height: AppTheme.spacingM),
-            Text('解锁成就 · 分享卡片', style: AppTextStyle.h3),
+            Text('成就解锁 · 分享卡片', style: AppTextStyle.h3),
             const SizedBox(height: 6),
             Text(
-              '已解锁 ${widget.achievementIds.length} 项，可生成图片分享到其他 App。',
+              '已解锁 ${widget.achievementIds.length} 项成就，可以直接分享，也可以顺手铸造成 NFT 纪念卡。',
               style: AppTextStyle.bodySmall,
             ),
             const SizedBox(height: AppTheme.spacingM),
@@ -149,6 +173,17 @@ class _AchievementShareSheetBodyState extends State<_AchievementShareSheetBody> 
               ),
             ),
             const SizedBox(height: AppTheme.spacingM),
+            OutlinedButton(
+              onPressed: (_capturing || _minting) ? null : _mintAchievementNft,
+              child: _minting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('铸造为 NFT'),
+            ),
+            const SizedBox(height: AppTheme.spacingM),
             Row(
               children: [
                 Expanded(
@@ -160,7 +195,7 @@ class _AchievementShareSheetBodyState extends State<_AchievementShareSheetBody> 
                 const SizedBox(width: AppTheme.spacingM),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _capturing ? null : _sharePng,
+                    onPressed: (_capturing || _minting) ? null : _sharePng,
                     child: _capturing
                         ? const SizedBox(
                             width: 20,
@@ -181,17 +216,16 @@ class _AchievementShareSheetBodyState extends State<_AchievementShareSheetBody> 
     );
   }
 
-  int _maxStreak(CheckInProvider p, List<Goal> goals) {
-    var m = 0;
-    for (final g in goals) {
-      final s = p.getStreak(g.id);
-      if (s > m) m = s;
+  int _maxStreak(CheckInProvider provider, List<Goal> goals) {
+    var maxValue = 0;
+    for (final goal in goals) {
+      final streak = provider.getStreak(goal.id);
+      if (streak > maxValue) maxValue = streak;
     }
-    return m;
+    return maxValue;
   }
 }
 
-/// 主控台「状态分享」半屏。
 Future<void> showStatusShareSheet(BuildContext context) async {
   final nickname = await UserProfilePrefs.getNickname();
   if (!context.mounted) return;
@@ -200,7 +234,7 @@ Future<void> showStatusShareSheet(BuildContext context) async {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _StatusShareSheetBody(nickname: nickname),
+    builder: (_) => _StatusShareSheetBody(nickname: nickname),
   );
 }
 
@@ -222,11 +256,12 @@ class _StatusShareSheetBodyState extends State<_StatusShareSheetBody> {
     if (kIsWeb) {
       AppUtils.showSnackBar(
         context,
-        'Web 端暂不支持图片分享，请使用 Android / iOS / 桌面客户端。',
+        'Web 端暂不支持图片分享，请使用 Android、iOS 或桌面端。',
         isError: true,
       );
       return;
     }
+
     setState(() => _capturing = true);
     try {
       final bytes = await _shot.capture(
@@ -237,7 +272,7 @@ class _StatusShareSheetBodyState extends State<_StatusShareSheetBody> {
       await ShareExportService.sharePngBytes(
         bytes,
         'mintday_status_${DateTime.now().millisecondsSinceEpoch}',
-        text: '我的 MintDay 打卡状态',
+        text: '这是我的 MintDay 打卡状态',
       );
     } finally {
       if (mounted) setState(() => _capturing = false);
@@ -256,9 +291,9 @@ class _StatusShareSheetBodyState extends State<_StatusShareSheetBody> {
       maxStreak: maxStreak,
     );
     final unlockedTitles = badges
-        .where((b) => b.unlocked)
+        .where((badge) => badge.unlocked)
         .take(4)
-        .map((b) => b.title)
+        .map((badge) => badge.title)
         .toList();
 
     return Padding(
@@ -267,28 +302,12 @@ class _StatusShareSheetBodyState extends State<_StatusShareSheetBody> {
         right: AppTheme.spacingL,
         bottom: AppTheme.spacingL + MediaQuery.paddingOf(context).bottom,
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.background,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXL)),
-          border: Border.all(color: AppTheme.border, width: 1.5),
-        ),
-        padding: const EdgeInsets.all(AppTheme.spacingL),
+      child: _SheetContainer(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            const _SheetHandle(),
             const SizedBox(height: AppTheme.spacingM),
             Text('分享我的打卡状态', style: AppTextStyle.h3),
             const SizedBox(height: AppTheme.spacingM),
@@ -299,7 +318,9 @@ class _StatusShareSheetBodyState extends State<_StatusShareSheetBody> {
                   nickname: widget.nickname,
                   maxStreakDays: maxStreak,
                   totalRecords: checkInProvider.checkIns.length,
-                  unlockedBadgeCount: badges.where((b) => b.unlocked).length,
+                  unlockedBadgeCount: badges
+                      .where((badge) => badge.unlocked)
+                      .length,
                   highlightLines: unlockedTitles,
                   headline: '打卡成就',
                   footer:
@@ -340,12 +361,51 @@ class _StatusShareSheetBodyState extends State<_StatusShareSheetBody> {
     );
   }
 
-  int _maxStreak(CheckInProvider p, List<Goal> goals) {
-    var m = 0;
-    for (final g in goals) {
-      final s = p.getStreak(g.id);
-      if (s > m) m = s;
+  int _maxStreak(CheckInProvider provider, List<Goal> goals) {
+    var maxValue = 0;
+    for (final goal in goals) {
+      final streak = provider.getStreak(goal.id);
+      if (streak > maxValue) maxValue = streak;
     }
-    return m;
+    return maxValue;
+  }
+}
+
+class _SheetContainer extends StatelessWidget {
+  final Widget child;
+
+  const _SheetContainer({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusXL),
+        ),
+        border: Border.all(color: AppTheme.border, width: 1.5),
+      ),
+      padding: const EdgeInsets.all(AppTheme.spacingL),
+      child: child,
+    );
+  }
+}
+
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 40,
+        height: 4,
+        decoration: BoxDecoration(
+          color: AppTheme.border,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
   }
 }

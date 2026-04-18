@@ -1,15 +1,17 @@
 import 'dart:developer';
+
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+
+import '../core/constants.dart';
 import '../models/check_in.dart';
 import '../models/milestone_progress.dart';
 import '../services/database_service.dart';
-import '../core/constants.dart';
 import 'gamification_provider.dart';
 
 class CheckInProvider extends ChangeNotifier {
   CheckInProvider({GamificationProvider? gamification})
-      : _gamification = gamification;
+    : _gamification = gamification;
 
   final GamificationProvider? _gamification;
   final _uuid = const Uuid();
@@ -19,62 +21,61 @@ class CheckInProvider extends ChangeNotifier {
   final Map<String, int> _streakMap = {};
 
   bool _isLoading = false;
-
-  /// 最近一次解锁的里程碑（用于弹窗展示，展示后调用 clearPendingMilestone）
   MilestoneProgress? _pendingMilestone;
-  MilestoneProgress? get pendingMilestone => _pendingMilestone;
-  void clearPendingMilestone() => _pendingMilestone = null;
 
   List<CheckIn> get checkIns => List.unmodifiable(_checkIns);
   bool get isLoading => _isLoading;
+  MilestoneProgress? get pendingMilestone => _pendingMilestone;
 
   bool isTodayChecked(String goalId) => _todayCheckedMap[goalId] ?? false;
   int getStreak(String goalId) => _streakMap[goalId] ?? 0;
 
-  /// 每日期打卡次数（热力图、统计）
+  void clearPendingMilestone() => _pendingMilestone = null;
+
   Map<String, int> get checkInCountByDate {
-    final Map<String, int> result = {};
+    final result = <String, int>{};
     for (final checkIn in _checkIns) {
-      if (checkIn.status != CheckInStatus.skipped) {
-        result[checkIn.dateString] =
-            (result[checkIn.dateString] ?? 0) + 1;
-      }
+      if (checkIn.status == CheckInStatus.skipped) continue;
+      result[checkIn.dateString] = (result[checkIn.dateString] ?? 0) + 1;
     }
     return result;
   }
 
-  /// 每个日历日一条聚合状态（用于月历热力图）。
-  /// 单日仅一条记录时用其 status；同日多条时取 done > partial > skipped。
   Map<String, CheckInStatus> get dateStatusMap {
     final byDate = <String, List<CheckIn>>{};
-    for (final c in _checkIns) {
-      byDate.putIfAbsent(c.dateString, () => []).add(c);
+    for (final checkIn in _checkIns) {
+      byDate.putIfAbsent(checkIn.dateString, () => []).add(checkIn);
     }
-    final out = <String, CheckInStatus>{};
-    for (final e in byDate.entries) {
-      final list = List<CheckIn>.from(e.value)
+
+    final result = <String, CheckInStatus>{};
+    for (final entry in byDate.entries) {
+      final items = List<CheckIn>.from(entry.value)
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      if (list.length == 1) {
-        out[e.key] = list.single.status;
+
+      if (items.length == 1) {
+        result[entry.key] = items.single.status;
         continue;
       }
-      final set = list.map((c) => c.status).toSet();
-      if (set.contains(CheckInStatus.done)) {
-        out[e.key] = CheckInStatus.done;
-      } else if (set.contains(CheckInStatus.partial)) {
-        out[e.key] = CheckInStatus.partial;
+
+      final statuses = items.map((item) => item.status).toSet();
+      if (statuses.contains(CheckInStatus.done)) {
+        result[entry.key] = CheckInStatus.done;
+      } else if (statuses.contains(CheckInStatus.partial)) {
+        result[entry.key] = CheckInStatus.partial;
       } else {
-        out[e.key] = CheckInStatus.skipped;
+        result[entry.key] = CheckInStatus.skipped;
       }
     }
-    return out;
+
+    return result;
   }
 
-  /// 最近 10 条记录中快速打卡占多数时，提示用户体验反思模式
   bool get shouldShowReflectionGuide {
     final recent = _checkIns.take(10).toList();
     if (recent.length < 5) return false;
-    final quickCount = recent.where((c) => c.mode == CheckInMode.quick).length;
+    final quickCount = recent
+        .where((checkIn) => checkIn.mode == CheckInMode.quick)
+        .length;
     return quickCount >= 5;
   }
 
@@ -88,12 +89,18 @@ class CheckInProvider extends ChangeNotifier {
 
     try {
       _checkIns = await DatabaseService.getAllCheckIns();
-      log('[CheckInProvider] 加载打卡: ${_checkIns.length} 条',
-          name: 'CheckInProvider');
+      log(
+        '[CheckInProvider] loaded ${_checkIns.length} check-ins',
+        name: 'CheckInProvider',
+      );
       await _refreshTodayAndStreaks();
     } catch (e, s) {
-      log('[CheckInProvider] 加载失败: $e',
-          name: 'CheckInProvider', error: e, stackTrace: s);
+      log(
+        '[CheckInProvider] load failed: $e',
+        name: 'CheckInProvider',
+        error: e,
+        stackTrace: s,
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -101,16 +108,15 @@ class CheckInProvider extends ChangeNotifier {
   }
 
   Future<void> _refreshTodayAndStreaks() async {
-    // 获取所有活跃目标的 goalId
-    final goalIds = _checkIns.map((c) => c.goalId).toSet();
+    final goalIds = _checkIns.map((checkIn) => checkIn.goalId).toSet();
     for (final goalId in goalIds) {
-      _todayCheckedMap[goalId] =
-          await DatabaseService.hasCheckedInToday(goalId);
+      _todayCheckedMap[goalId] = await DatabaseService.hasCheckedInToday(
+        goalId,
+      );
       _streakMap[goalId] = await DatabaseService.getStreakDays(goalId);
     }
   }
 
-  /// 提交打卡
   Future<CheckIn?> submitCheckIn({
     required String goalId,
     required CheckInMode mode,
@@ -123,9 +129,11 @@ class CheckInProvider extends ChangeNotifier {
     String? reflectionNext,
     List<String> imagePaths = const [],
   }) async {
-    // 防止重复打卡
     if (_todayCheckedMap[goalId] == true) {
-      log('[CheckInProvider] 今日已打卡: $goalId', name: 'CheckInProvider');
+      log(
+        '[CheckInProvider] duplicate check-in prevented for $goalId',
+        name: 'CheckInProvider',
+      );
       return null;
     }
 
@@ -157,37 +165,42 @@ class CheckInProvider extends ChangeNotifier {
       _checkIns.insert(0, checkIn);
       _todayCheckedMap[goalId] = true;
 
-      // 更新连续天数
       final newStreak = await DatabaseService.getStreakDays(goalId);
       _streakMap[goalId] = newStreak;
 
-      // 静默检测并写入里程碑
       await _checkAndWriteMilestones(goalId, newStreak);
-
-      // 成就判定、赛季进度与跨赛季总结落库
       await _gamification?.onAfterCheckInCommitted();
 
       notifyListeners();
-      log('[CheckInProvider] 打卡成功: goalId=$goalId, streak=$newStreak',
-          name: 'CheckInProvider');
+      log(
+        '[CheckInProvider] submitted check-in for $goalId, streak=$newStreak',
+        name: 'CheckInProvider',
+      );
       return checkIn;
     } catch (e, s) {
-      log('[CheckInProvider] 打卡失败: $e',
-          name: 'CheckInProvider', error: e, stackTrace: s);
+      log(
+        '[CheckInProvider] submit failed: $e',
+        name: 'CheckInProvider',
+        error: e,
+        stackTrace: s,
+      );
       return null;
     }
   }
 
-  /// 检测里程碑，首次解锁时写入 DB 并设置 pendingMilestone 供 UI 展示
   Future<void> _checkAndWriteMilestones(
-      String goalId, int currentStreak) async {
+    String goalId,
+    int currentStreak,
+  ) async {
     final existing = await DatabaseService.getMilestonesByGoal(goalId);
 
     for (final target in AppConstants.streakMilestones) {
       if (currentStreak < target) continue;
 
       final alreadyExists = existing.any(
-        (m) => m.type == MilestoneType.streak && m.targetValue == target,
+        (milestone) =>
+            milestone.type == MilestoneType.streak &&
+            milestone.targetValue == target,
       );
       if (alreadyExists) continue;
 
@@ -204,43 +217,72 @@ class CheckInProvider extends ChangeNotifier {
       );
       await DatabaseService.insertMilestone(milestone);
 
-      // 只保留最高级别里程碑用于本次弹窗（取 target 最大的）
       if (_pendingMilestone == null ||
-          target > (_pendingMilestone!.targetValue)) {
+          target > _pendingMilestone!.targetValue) {
         _pendingMilestone = milestone;
       }
-      log('[CheckInProvider] 解锁里程碑: ${milestone.title}',
-          name: 'CheckInProvider');
+
+      log(
+        '[CheckInProvider] unlocked milestone ${milestone.title}',
+        name: 'CheckInProvider',
+      );
     }
   }
 
-  /// 获取某目标的所有打卡记录
   List<CheckIn> getCheckInsForGoal(String goalId) {
-    return _checkIns.where((c) => c.goalId == goalId).toList();
+    return _checkIns.where((checkIn) => checkIn.goalId == goalId).toList();
   }
 
-  /// 按日期分组的打卡记录（用于历史页）
+  List<CheckIn> searchCheckIns(String keyword) {
+    final normalized = keyword.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return List<CheckIn>.from(_checkIns);
+    }
+
+    return _checkIns.where((checkIn) {
+      final searchableValues = [
+        checkIn.note,
+        checkIn.reflectionProgress,
+        checkIn.reflectionNext,
+      ];
+      return searchableValues.any(
+        (value) => value != null && value.toLowerCase().contains(normalized),
+      );
+    }).toList();
+  }
+
+  List<CheckIn> filterByGoalIds(List<String> ids) {
+    if (ids.isEmpty) {
+      return List<CheckIn>.from(_checkIns);
+    }
+
+    final goalIds = ids.toSet();
+    return _checkIns
+        .where((checkIn) => goalIds.contains(checkIn.goalId))
+        .toList();
+  }
+
   Map<String, List<CheckIn>> get groupedByDate {
-    final Map<String, List<CheckIn>> result = {};
+    final result = <String, List<CheckIn>>{};
     for (final checkIn in _checkIns) {
-      final key = checkIn.dateString;
-      result.putIfAbsent(key, () => []).add(checkIn);
+      result.putIfAbsent(checkIn.dateString, () => []).add(checkIn);
     }
     return result;
   }
 
-  /// 某目标的打卡日期集合（用于热力图）
   Set<String> getCheckedDateStrings(String goalId) {
     return _checkIns
-        .where((c) => c.goalId == goalId && c.status != CheckInStatus.skipped)
-        .map((c) => c.dateString)
+        .where(
+          (checkIn) =>
+              checkIn.goalId == goalId &&
+              checkIn.status != CheckInStatus.skipped,
+        )
+        .map((checkIn) => checkIn.dateString)
         .toSet();
   }
 
-  /// 刷新单个目标的今日状态和连续天数
   Future<void> refreshGoalStatus(String goalId) async {
-    _todayCheckedMap[goalId] =
-        await DatabaseService.hasCheckedInToday(goalId);
+    _todayCheckedMap[goalId] = await DatabaseService.hasCheckedInToday(goalId);
     _streakMap[goalId] = await DatabaseService.getStreakDays(goalId);
     notifyListeners();
   }

@@ -1,22 +1,46 @@
 import 'dart:developer';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'app.dart';
+import 'core/supabase_config.dart';
 import 'services/database_service.dart';
 import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Web 平台使用 WASM SQLite，移动端/桌面使用原生 sqflite
   if (kIsWeb) {
     databaseFactory = databaseFactoryFfiWeb;
   }
 
-  // 设置状态栏样式
+  if (SupabaseConfig.isConfigured) {
+    try {
+      await Supabase.initialize(
+        url: SupabaseConfig.url,
+        anonKey: SupabaseConfig.anonKey,
+      );
+      log('[INIT] Supabase initialized', name: 'main');
+    } catch (error, stackTrace) {
+      log(
+        '[INIT] Supabase initialization failed: $error',
+        name: 'main',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  } else {
+    log(
+      '[INIT] SupabaseConfig is using placeholder values; auth is disabled.',
+      name: 'main',
+    );
+  }
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -24,33 +48,43 @@ void main() async {
     ),
   );
 
-  // 仅允许竖屏
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  // 全局未捕获异常处理
-  FlutterError.onError = (FlutterErrorDetails details) {
-    log('[ERROR] Flutter Error: ${details.exception}',
-        name: 'main', error: details.exception, stackTrace: details.stack);
+  FlutterError.onError = (details) {
+    log(
+      '[ERROR] Flutter Error: ${details.exception}',
+      name: 'main',
+      error: details.exception,
+      stackTrace: details.stack,
+    );
     FlutterError.presentError(details);
   };
 
-  // 预初始化数据库（提前建立连接，避免首次操作延迟）
   try {
     await DatabaseService.database;
-    log('[INIT] 数据库初始化成功', name: 'main');
-  } catch (e, s) {
-    log('[INIT] 数据库初始化失败: $e', name: 'main', error: e, stackTrace: s);
+    log('[INIT] Database initialized', name: 'main');
+  } catch (error, stackTrace) {
+    log(
+      '[INIT] Database initialization failed: $error',
+      name: 'main',
+      error: error,
+      stackTrace: stackTrace,
+    );
   }
 
-  // 初始化通知服务（仅非 Web 平台，Web 跳过）
   try {
     await NotificationService.instance.init();
-    log('[INIT] 通知服务初始化成功', name: 'main');
-  } catch (e, s) {
-    log('[INIT] 通知服务初始化失败: $e', name: 'main', error: e, stackTrace: s);
+    log('[INIT] Notification service initialized', name: 'main');
+  } catch (error, stackTrace) {
+    log(
+      '[INIT] Notification service initialization failed: $error',
+      name: 'main',
+      error: error,
+      stackTrace: stackTrace,
+    );
   }
 
   runApp(const MintDayApp());

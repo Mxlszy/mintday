@@ -45,10 +45,7 @@ class LocalImagePreview extends StatelessWidget {
       return preview;
     }
 
-    return GestureDetector(
-      onTap: onTap,
-      child: preview,
-    );
+    return GestureDetector(onTap: onTap, child: preview);
   }
 }
 
@@ -79,7 +76,7 @@ class _FallbackPreview extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.broken_image_outlined, color: AppTheme.textHint),
+          Icon(Icons.broken_image_outlined, color: AppTheme.textHint),
           const SizedBox(height: AppTheme.spacingXS),
           Text(
             path.basename(imagePath),

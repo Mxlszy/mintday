@@ -9,10 +9,14 @@ import '../models/check_in.dart';
 class CheckInHeatmap extends StatefulWidget {
   /// key: `yyyy-MM-dd`，value: 当日聚合 [CheckInStatus]（见 [CheckInProvider.dateStatusMap]）
   final Map<String, CheckInStatus> dateStatusMap;
+  final ValueChanged<DateTime>? onEmptyCellTap;
+  final bool enableInlineToggle;
 
   const CheckInHeatmap({
     super.key,
     required this.dateStatusMap,
+    this.onEmptyCellTap,
+    this.enableInlineToggle = true,
   });
 
   static String _dateKey(DateTime d) =>
@@ -42,6 +46,7 @@ class CheckInHeatmap extends StatefulWidget {
 
 class _CheckInHeatmapState extends State<CheckInHeatmap> {
   late DateTime _visibleMonth;
+  final Map<String, CheckInStatus> _localStatusOverrides = {};
 
   @override
   void initState() {
@@ -50,13 +55,25 @@ class _CheckInHeatmapState extends State<CheckInHeatmap> {
     _visibleMonth = DateTime(n.year, n.month, 1);
   }
 
+  @override
+  void didUpdateWidget(covariant CheckInHeatmap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _localStatusOverrides.removeWhere((key, _) {
+      return widget.dateStatusMap.containsKey(key);
+    });
+  }
+
   DateTime get _today {
     final n = DateTime.now();
     return DateTime(n.year, n.month, n.day);
   }
 
-  DateTime get _currentMonthStart =>
-      DateTime(_today.year, _today.month, 1);
+  Map<String, CheckInStatus> get _effectiveDateStatusMap => {
+    ...widget.dateStatusMap,
+    ..._localStatusOverrides,
+  };
+
+  DateTime get _currentMonthStart => DateTime(_today.year, _today.month, 1);
 
   bool get _canGoNext => _visibleMonth.isBefore(_currentMonthStart);
 
@@ -97,9 +114,21 @@ class _CheckInHeatmapState extends State<CheckInHeatmap> {
       final day = DateTime(y, m, d);
       if (day.isAfter(_today)) break;
       final key = CheckInHeatmap._dateKey(day);
-      if (widget.dateStatusMap.containsKey(key)) n++;
+      if (_effectiveDateStatusMap.containsKey(key)) n++;
     }
     return n;
+  }
+
+  void _handleEmptyCellTap(DateTime day) {
+    if (!widget.enableInlineToggle || day.isAfter(_today)) return;
+    final key = CheckInHeatmap._dateKey(day);
+    if (_effectiveDateStatusMap.containsKey(key)) return;
+
+    setState(() {
+      _localStatusOverrides[key] = CheckInStatus.done;
+    });
+
+    widget.onEmptyCellTap?.call(day);
   }
 
   String _monthTitle() => '${_visibleMonth.year}年${_visibleMonth.month}月';
@@ -107,10 +136,7 @@ class _CheckInHeatmapState extends State<CheckInHeatmap> {
   Widget _buildHeader() {
     return Row(
       children: [
-        _MonthNavButton(
-          icon: Icons.chevron_left,
-          onTap: _prevMonth,
-        ),
+        _MonthNavButton(icon: Icons.chevron_left, onTap: _prevMonth),
         Expanded(
           child: Text(
             _monthTitle(),
@@ -135,13 +161,13 @@ class _CheckInHeatmapState extends State<CheckInHeatmap> {
       color: AppTheme.textHint,
     );
     Widget swatch(Color c) => Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: c,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        );
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: c,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
@@ -194,7 +220,7 @@ class _CheckInHeatmapState extends State<CheckInHeatmap> {
             children: [
               Row(
                 children: [
-                  const PixelIcon(
+                  PixelIcon(
                     icon: PixelIcons.leaf,
                     size: 16,
                     color: AppTheme.primary,
@@ -219,7 +245,10 @@ class _CheckInHeatmapState extends State<CheckInHeatmap> {
           _MonthHeatGrid(
             month: _visibleMonth,
             today: _today,
-            dateStatusMap: widget.dateStatusMap,
+            dateStatusMap: _effectiveDateStatusMap,
+            onEmptyCellTap: widget.enableInlineToggle
+                ? _handleEmptyCellTap
+                : null,
           ),
         ],
       ),
@@ -231,10 +260,7 @@ class _MonthNavButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
 
-  const _MonthNavButton({
-    required this.icon,
-    required this.onTap,
-  });
+  const _MonthNavButton({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -261,11 +287,13 @@ class _MonthHeatGrid extends StatelessWidget {
   final DateTime month;
   final DateTime today;
   final Map<String, CheckInStatus> dateStatusMap;
+  final ValueChanged<DateTime>? onEmptyCellTap;
 
   const _MonthHeatGrid({
     required this.month,
     required this.today,
     required this.dateStatusMap,
+    this.onEmptyCellTap,
   });
 
   @override
@@ -309,10 +337,14 @@ class _MonthHeatGrid extends StatelessWidget {
                 return Padding(
                   padding: EdgeInsets.only(right: col < 6 ? gap : 0),
                   child: _HeatCell(
+                    key: ValueKey(key),
                     day: day,
                     isToday: isToday,
                     isFuture: isFuture,
                     status: status,
+                    onTap: !isFuture && status == null && onEmptyCellTap != null
+                        ? () => onEmptyCellTap!(day)
+                        : null,
                   ),
                 );
               }),
@@ -324,41 +356,152 @@ class _MonthHeatGrid extends StatelessWidget {
   }
 }
 
-class _HeatCell extends StatelessWidget {
+class _HeatCell extends StatefulWidget {
   final DateTime day;
   final bool isToday;
   final bool isFuture;
   final CheckInStatus? status;
+  final VoidCallback? onTap;
 
   const _HeatCell({
+    super.key,
     required this.day,
     required this.isToday,
     required this.isFuture,
     required this.status,
+    this.onTap,
   });
 
+  @override
+  State<_HeatCell> createState() => _HeatCellState();
+}
+
+class _HeatCellState extends State<_HeatCell>
+    with SingleTickerProviderStateMixin {
+  static final Color _activatedShadowColor = Color.alphaBlend(
+    AppTheme.primary.withValues(alpha: 0.08),
+    AppTheme.heatmapCellEmpty,
+  );
+
+  static final Color _activatedFlashColor = Color.alphaBlend(
+    AppTheme.goldAccent.withValues(alpha: 0.12),
+    Color.alphaBlend(
+      Colors.white.withValues(alpha: 0.26),
+      AppTheme.heatmapCellDone,
+    ),
+  );
+
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+  late final Animation<double> _iconOpacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 620),
+    );
+    _scale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(
+          begin: 1,
+          end: 1.2,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 34,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(
+          begin: 1.2,
+          end: 1,
+        ).chain(CurveTween(curve: Curves.elasticOut)),
+        weight: 66,
+      ),
+    ]).animate(_controller);
+    _iconOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween<double>(0), weight: 16),
+      TweenSequenceItem(
+        tween: Tween<double>(
+          begin: 0,
+          end: 1,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 24,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(
+          begin: 1,
+          end: 0,
+        ).chain(CurveTween(curve: Curves.easeIn)),
+        weight: 60,
+      ),
+    ]).animate(_controller);
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeatCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final activated =
+        oldWidget.status == null && widget.status == CheckInStatus.done;
+    if (activated) {
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   String _tooltipMessage() {
-    if (isFuture) return '';
-    final prefix = '${day.month}/${day.day}';
-    if (status == null) return '$prefix 暂无记录';
-    return switch (status!) {
-      CheckInStatus.skipped => '$prefix · 跳过',
-      CheckInStatus.partial => '$prefix · 部分完成',
-      CheckInStatus.done => '$prefix · 完成',
+    if (widget.isFuture) return '';
+    final prefix = '${widget.day.month}/${widget.day.day}';
+    if (widget.status == null) return '$prefix \u6682\u65e0\u8bb0\u5f55';
+    return switch (widget.status!) {
+      CheckInStatus.skipped => '$prefix \u00b7 \u8df3\u8fc7',
+      CheckInStatus.partial => '$prefix \u00b7 \u90e8\u5206\u5b8c\u6210',
+      CheckInStatus.done => '$prefix \u00b7 \u5b8c\u6210',
     };
+  }
+
+  Color _animatedFill(Color targetColor) {
+    return TweenSequence<Color?>([
+          TweenSequenceItem(
+            tween: ColorTween(
+              begin: AppTheme.heatmapCellEmpty,
+              end: _activatedShadowColor,
+            ).chain(CurveTween(curve: Curves.easeOut)),
+            weight: 18,
+          ),
+          TweenSequenceItem(
+            tween: ColorTween(
+              begin: _activatedShadowColor,
+              end: _activatedFlashColor,
+            ).chain(CurveTween(curve: Curves.easeOut)),
+            weight: 24,
+          ),
+          TweenSequenceItem(
+            tween: ColorTween(
+              begin: _activatedFlashColor,
+              end: targetColor,
+            ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+            weight: 58,
+          ),
+        ]).evaluate(_controller) ??
+        targetColor;
   }
 
   @override
   Widget build(BuildContext context) {
-    final fill = CheckInHeatmap.colorForStatus(
-      isFuture: isFuture,
-      isToday: isToday,
-      status: status,
+    final baseFill = CheckInHeatmap.colorForStatus(
+      isFuture: widget.isFuture,
+      isToday: widget.isToday,
+      status: widget.status,
     );
 
     Border? border;
-    if (!isFuture && isToday) {
-      if (status == CheckInStatus.done) {
+    if (!widget.isFuture && widget.isToday) {
+      if (widget.status == CheckInStatus.done) {
         border = Border.all(
           color: Colors.white.withValues(alpha: 0.35),
           width: 1,
@@ -370,14 +513,50 @@ class _HeatCell extends StatelessWidget {
 
     return Tooltip(
       message: _tooltipMessage(),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(2),
-          border: border,
+      child: MouseRegion(
+        cursor: widget.onTap == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              final fill = _controller.isAnimating
+                  ? _animatedFill(baseFill)
+                  : baseFill;
+              final showIcon =
+                  _controller.value > 0.12 && _iconOpacity.value > 0.01;
+
+              return Transform.scale(
+                scale: _scale.value,
+                child: SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: fill,
+                      borderRadius: BorderRadius.circular(2),
+                      border: border,
+                    ),
+                    child: showIcon
+                        ? Center(
+                            child: Opacity(
+                              opacity: _iconOpacity.value,
+                              child: PixelIcon(
+                                icon: PixelIcons.check,
+                                size: 8,
+                                color: AppTheme.surface,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

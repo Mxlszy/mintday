@@ -7,15 +7,22 @@ import 'package:mintday/models/goal.dart';
 
 /// 纯内存模拟：不连真实 DB，便于在终端观察成就与赛季统计行为。
 ///
-/// 运行（展开输出）：
-/// `flutter test test/gamification_simulation_test.dart --reporter expanded`
+/// 默认安静运行：
+/// `flutter test test/gamification_simulation_test.dart`
+///
+/// 如需展开完整日志：
+/// `flutter test test/gamification_simulation_test.dart --dart-define=MINTDAY_SIM_VERBOSE=true --reporter expanded`
+const _verboseSimulationLog = bool.fromEnvironment('MINTDAY_SIM_VERBOSE');
+
 void main() {
   test('模拟：链上人生账本 · 成就 + 30 日赛季统计演示', () {
     final buffer = StringBuffer();
 
     void p(String s) {
-      // ignore: avoid_print
-      print(s);
+      if (_verboseSimulationLog) {
+        // ignore: avoid_print
+        print(s);
+      }
       buffer.writeln(s);
     }
 
@@ -77,28 +84,17 @@ void main() {
         mode: mode,
         status: status,
         mood: mood,
+        imagePaths: images,
         createdAt: created,
       );
     }
 
     // 1/1：晨光 + 夜间 + 习惯线
-    checkIns.add(mk(
-      goalId: gHabit.id,
-      date: DateTime(2024, 1, 1),
-      hour: 6,
-    ));
-    checkIns.add(mk(
-      goalId: gHealth.id,
-      date: DateTime(2024, 1, 1),
-      hour: 23,
-    ));
+    checkIns.add(mk(goalId: gHabit.id, date: DateTime(2024, 1, 1), hour: 6));
+    checkIns.add(mk(goalId: gHealth.id, date: DateTime(2024, 1, 1), hour: 23));
     // 1/2 ~ 1/9：习惯每日打卡（叠全球连续日）
     for (var d = 2; d <= 9; d++) {
-      checkIns.add(mk(
-        goalId: gHabit.id,
-        date: DateTime(2024, 1, d),
-        hour: 9,
-      ));
+      checkIns.add(mk(goalId: gHabit.id, date: DateTime(2024, 1, d), hour: 9));
     }
     // 1/10：同日全垒打（三个目标都打卡）+ 多一条刷题形成「高能一日」
     checkIns.add(mk(goalId: gHabit.id, date: DateTime(2024, 1, 10), hour: 7));
@@ -107,51 +103,59 @@ void main() {
     checkIns.add(mk(goalId: gStudy.id, date: DateTime(2024, 1, 10), hour: 20));
     // 反思若干次
     for (var i = 0; i < 10; i++) {
-      checkIns.add(mk(
-        goalId: gHabit.id,
-        date: DateTime(2024, 1, 11 + i),
-        hour: 21,
-        mode: CheckInMode.reflection,
-        mood: 4,
-      ));
+      checkIns.add(
+        mk(
+          goalId: gHabit.id,
+          date: DateTime(2024, 1, 11 + i),
+          hour: 21,
+          mode: CheckInMode.reflection,
+          mood: 4,
+        ),
+      );
     }
     // 快速打卡凑 20+
     for (var i = 0; i < 12; i++) {
-      checkIns.add(mk(
-        goalId: gHealth.id,
-        date: DateTime(2024, 1, 11 + (i % 5)),
-        hour: 8,
-      ));
+      checkIns.add(
+        mk(goalId: gHealth.id, date: DateTime(2024, 1, 11 + (i % 5)), hour: 8),
+      );
     }
     // 带图 1 次
-    checkIns.add(mk(
-      goalId: gStudy.id,
-      date: DateTime(2024, 1, 25),
-      hour: 15,
-      images: const ['/fake/path.jpg'],
-    ));
+    checkIns.add(
+      mk(
+        goalId: gStudy.id,
+        date: DateTime(2024, 1, 25),
+        hour: 15,
+        images: const ['/fake/path.jpg'],
+      ),
+    );
     // 部分完成 5 次
     for (var i = 0; i < 5; i++) {
-      checkIns.add(mk(
-        goalId: gHabit.id,
-        date: DateTime(2024, 1, 26 + i),
-        hour: 10,
-        status: CheckInStatus.partial,
-      ));
+      checkIns.add(
+        mk(
+          goalId: gHabit.id,
+          date: DateTime(2024, 1, 26 + i),
+          hour: 10,
+          status: CheckInStatus.partial,
+        ),
+      );
     }
     // 某日双反思
-    checkIns.add(mk(
-      goalId: gHabit.id,
-      date: DateTime(2024, 1, 28),
-      hour: 8,
-      mode: CheckInMode.reflection,
-    ));
-    checkIns.add(mk(
-      goalId: gHealth.id,
-      date: DateTime(2024, 1, 28),
-      hour: 20,
-      mode: CheckInMode.reflection,
-    ));
+    checkIns.add(
+      mk(
+        goalId: gHabit.id,
+        date: DateTime(2024, 1, 28),
+        hour: 8,
+        mode: CheckInMode.reflection,
+      ),
+    );
+    checkIns.add(
+      mk(
+        goalId: gHealth.id,
+        date: DateTime(2024, 1, 28),
+        hour: 20,
+        mode: CheckInMode.reflection,
+      ),
+    );
 
     p('【虚构数据】');
     p('  活跃目标: ${goals.length}（习惯 / 健康 / 学习，seasonId=s30_0）');
@@ -170,7 +174,8 @@ void main() {
 
     final unlocked = AchievementEvaluator.evaluateAllUnlocked(snap);
     p('【本模拟下已满足成就】共 ${unlocked.length} / ${AchievementCatalog.count}');
-    for (final id in unlocked.toList()..sort((a, b) => a.name.compareTo(b.name))) {
+    for (final id
+        in unlocked.toList()..sort((a, b) => a.name.compareTo(b.name))) {
       final def = AchievementCatalog.byId[id];
       if (def != null) {
         p('  · [${def.dimension.label}] ${def.title} — ${def.subtitle}');
@@ -187,8 +192,10 @@ void main() {
     // ── 赛季总结（index 0，与锚点一致）──
     final window = SeasonRollingUtils.windowForIndex(0, anchor: anchor);
     p('\n【赛季窗口】${window.seasonId}');
-    p('  ${window.startInclusive.toIso8601String().split('T').first} '
-        '~ ${window.endInclusive.toIso8601String().split('T').first}');
+    p(
+      '  ${window.startInclusive.toIso8601String().split('T').first} '
+      '~ ${window.endInclusive.toIso8601String().split('T').first}',
+    );
 
     final summary = SeasonRollingUtils.buildSeasonSummary(
       seasonIndex: 0,
@@ -214,5 +221,5 @@ void main() {
     expect(unlocked.length, greaterThan(10));
     expect(summary.seasonId, 's30_0');
     expect(buffer.isNotEmpty, true);
-  });
+  }, timeout: const Timeout(Duration(seconds: 10)));
 }

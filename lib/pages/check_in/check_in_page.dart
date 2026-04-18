@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../../core/page_transitions.dart';
 import '../../core/pixel_icons.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils.dart';
 import '../../models/check_in.dart';
+import '../../models/goal.dart';
+import '../wallet/mint_nft_page.dart';
 import '../../providers/check_in_provider.dart';
 import '../../providers/goal_provider.dart';
+import '../../providers/social_provider.dart';
 import '../../services/storage_service.dart';
 import '../../widgets/local_image_preview.dart';
 import '../../widgets/milestone_celebration.dart';
@@ -63,9 +67,7 @@ class _CheckInPageState extends State<CheckInPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: const Text('记录今天'),
-      ),
+      appBar: AppBar(title: const Text('记录今天')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           AppTheme.spacingL,
@@ -88,8 +90,7 @@ class _CheckInPageState extends State<CheckInPage> {
               hint: '选填',
               child: _buildQuickContent(),
             ),
-          if (_mode == CheckInMode.reflection)
-            _buildReflectionContent(),
+          if (_mode == CheckInMode.reflection) _buildReflectionContent(),
           const SizedBox(height: AppTheme.spacingL),
           _SectionCard(
             label: '图片证据',
@@ -183,9 +184,7 @@ class _CheckInPageState extends State<CheckInPage> {
   Widget _buildQuickContent() {
     return TextField(
       controller: _noteController,
-      decoration: const InputDecoration(
-        hintText: '今天做了什么，或者想给今天留下一句话',
-      ),
+      decoration: const InputDecoration(hintText: '今天做了什么，或者想给今天留下一句话'),
       style: AppTextStyle.body,
       maxLines: 4,
       maxLength: 500,
@@ -200,9 +199,7 @@ class _CheckInPageState extends State<CheckInPage> {
           hint: '选填',
           child: TextField(
             controller: _progressController,
-            decoration: const InputDecoration(
-              hintText: '例如：把第 3 节课程看完了',
-            ),
+            decoration: const InputDecoration(hintText: '例如：把第 3 节课程看完了'),
             style: AppTextStyle.body,
             maxLines: 3,
             maxLength: 300,
@@ -214,9 +211,7 @@ class _CheckInPageState extends State<CheckInPage> {
           hint: '选填',
           child: TextField(
             controller: _blockerController,
-            decoration: const InputDecoration(
-              hintText: '例如：下班太晚，精力不够',
-            ),
+            decoration: const InputDecoration(hintText: '例如：下班太晚，精力不够'),
             style: AppTextStyle.body,
             maxLines: 2,
             maxLength: 200,
@@ -228,9 +223,7 @@ class _CheckInPageState extends State<CheckInPage> {
           hint: '选填',
           child: TextField(
             controller: _nextController,
-            decoration: const InputDecoration(
-              hintText: '例如：明天先完成 4 个单词卡片',
-            ),
+            decoration: const InputDecoration(hintText: '例如：明天先完成 4 个单词卡片'),
             style: AppTextStyle.body,
             maxLines: 2,
             maxLength: 200,
@@ -261,7 +254,9 @@ class _CheckInPageState extends State<CheckInPage> {
             ..._selectedImagePaths.asMap().entries.map((entry) {
               return _SelectedImageTile(
                 imagePath: entry.value,
-                onRemove: _isSubmitting ? null : () => _removeImageAt(entry.key),
+                onRemove: _isSubmitting
+                    ? null
+                    : () => _removeImageAt(entry.key),
               );
             }),
             if (isSupported && canAddMore)
@@ -335,7 +330,8 @@ class _CheckInPageState extends State<CheckInPage> {
 
     if (checkIn != null) {
       final streak = checkInProvider.getStreak(widget.goalId);
-      _showSuccessFeedback(streak);
+      final goal = context.read<GoalProvider>().getGoalById(widget.goalId);
+      _showSuccessFeedback(checkIn, goal, streak);
       return;
     }
 
@@ -369,23 +365,34 @@ class _CheckInPageState extends State<CheckInPage> {
     });
   }
 
-  void _showSuccessFeedback(int streak) {
+  void _showSuccessFeedback(CheckIn checkIn, Goal? goal, int streak) {
     final checkInProvider = context.read<CheckInProvider>();
     final milestone = checkInProvider.pendingMilestone;
     checkInProvider.clearPendingMilestone();
+    final navigator = Navigator.of(context);
 
     // 先弹里程碑庆祝浮层（若有）
     if (milestone != null) {
       MilestoneCelebrationOverlay.show(context, milestone);
     }
 
-    showModalBottomSheet(
+    showModalBottomSheet<_CheckInSuccessAction>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CheckInSuccessSheet(streak: streak),
-    ).then((_) {
-      if (mounted) {
-        Navigator.of(context).pop();
+      builder: (_) => _ShareableCheckInSuccessSheet(
+        streak: streak,
+        checkIn: checkIn,
+        goal: goal,
+      ),
+    ).then((action) {
+      if (!mounted) return;
+      navigator.pop();
+      if (action == _CheckInSuccessAction.mintNft) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          navigator.push(
+            sharedAxisRoute(MintNftPage(initialCheckInId: checkIn.id)),
+          );
+        });
       }
     });
   }
@@ -415,7 +422,7 @@ class _HeaderCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const PixelIcon(
+              PixelIcon(
                 icon: PixelIcons.clock,
                 size: 14,
                 color: AppTheme.primary,
@@ -441,11 +448,7 @@ class _SectionCard extends StatelessWidget {
   final String? hint;
   final Widget child;
 
-  const _SectionCard({
-    required this.label,
-    this.hint,
-    required this.child,
-  });
+  const _SectionCard({required this.label, this.hint, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -515,10 +518,7 @@ class _SelectedImageTile extends StatelessWidget {
   final String imagePath;
   final VoidCallback? onRemove;
 
-  const _SelectedImageTile({
-    required this.imagePath,
-    this.onRemove,
-  });
+  const _SelectedImageTile({required this.imagePath, this.onRemove});
 
   @override
   Widget build(BuildContext context) {
@@ -557,10 +557,7 @@ class _AddImageTile extends StatelessWidget {
   final int remainingCount;
   final VoidCallback? onTap;
 
-  const _AddImageTile({
-    required this.remainingCount,
-    this.onTap,
-  });
+  const _AddImageTile({required this.remainingCount, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -576,11 +573,7 @@ class _AddImageTile extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const PixelIcon(
-              icon: PixelIcons.plus,
-              size: 20,
-              color: AppTheme.primary,
-            ),
+            PixelIcon(icon: PixelIcons.plus, size: 20, color: AppTheme.primary),
             const SizedBox(height: 6),
             Text('继续添加', style: AppTextStyle.bodySmall),
             const SizedBox(height: 2),
@@ -592,6 +585,7 @@ class _AddImageTile extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _CheckInSuccessSheet extends StatelessWidget {
   final int streak;
 
@@ -649,6 +643,165 @@ class _CheckInSuccessSheet extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+enum _CheckInSuccessAction { mintNft }
+
+class _ShareableCheckInSuccessSheet extends StatefulWidget {
+  final int streak;
+  final CheckIn checkIn;
+  final Goal? goal;
+
+  const _ShareableCheckInSuccessSheet({
+    required this.streak,
+    required this.checkIn,
+    required this.goal,
+  });
+
+  @override
+  State<_ShareableCheckInSuccessSheet> createState() =>
+      _ShareableCheckInSuccessSheetState();
+}
+
+class _ShareableCheckInSuccessSheetState
+    extends State<_ShareableCheckInSuccessSheet> {
+  bool _isSharing = false;
+  late bool _hasShared;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasShared = context.read<SocialProvider>().hasPublishedCheckIn(
+      widget.checkIn.id,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canShare = widget.goal?.isPublic == true;
+
+    return Container(
+      margin: const EdgeInsets.all(AppTheme.spacingM),
+      padding: const EdgeInsets.all(AppTheme.spacingL),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXL),
+        boxShadow: AppTheme.neuRaised,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 68,
+            height: 68,
+            decoration: BoxDecoration(
+              color: AppTheme.primary,
+              borderRadius: BorderRadius.circular(AppTheme.radiusM),
+            ),
+            child: const Center(
+              child: PixelIcon(
+                icon: PixelIcons.trophy,
+                size: 30,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingM),
+          Text(
+            widget.streak > 1 ? AppUtils.streakText(widget.streak) : '今天已记录',
+            style: AppTextStyle.h2,
+          ),
+          const SizedBox(height: AppTheme.spacingS),
+          Text(
+            AppUtils.randomEncouragement(),
+            style: AppTextStyle.body.copyWith(color: AppTheme.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppTheme.spacingL),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: canShare && !_isSharing && !_hasShared
+                  ? _shareToSocial
+                  : null,
+              icon: _isSharing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _hasShared ? Icons.check_circle : Icons.public,
+                      size: 18,
+                    ),
+              label: Text(
+                _hasShared
+                    ? '已分享到广场'
+                    : canShare
+                    ? '分享到广场'
+                    : '目标未公开，暂不可分享',
+              ),
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingM),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () =>
+                  Navigator.of(context).pop(_CheckInSuccessAction.mintNft),
+              icon: const Icon(Icons.auto_awesome, size: 18),
+              label: const Text('铸造纪念 NFT'),
+            ),
+          ),
+          if (!canShare) ...[
+            const SizedBox(height: AppTheme.spacingS),
+            Text(
+              '去编辑目标开启“公开这个目标”后，就可以把这次打卡分享到成长广场。',
+              style: AppTextStyle.caption,
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: AppTheme.spacingM),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Text('继续'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _shareToSocial() async {
+    final goal = widget.goal;
+    if (goal == null || !goal.isPublic) {
+      AppUtils.showSnackBar(context, '这个目标还没有公开，暂时不能分享', isError: true);
+      return;
+    }
+
+    setState(() => _isSharing = true);
+    final published = await context.read<SocialProvider>().publishCheckIn(
+      widget.checkIn,
+      goal,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isSharing = false;
+      _hasShared = published || _hasShared;
+    });
+
+    AppUtils.showSnackBar(
+      context,
+      published ? '已分享到成长广场' : '这条打卡已经分享过了',
+      isError: !published,
     );
   }
 }

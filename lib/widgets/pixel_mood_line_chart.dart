@@ -23,10 +23,7 @@ class MoodDaySample {
 class PixelMoodLineChart extends StatelessWidget {
   final List<CheckIn> checkIns;
 
-  const PixelMoodLineChart({
-    super.key,
-    required this.checkIns,
-  });
+  const PixelMoodLineChart({super.key, required this.checkIns});
 
   static DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -55,11 +52,7 @@ class PixelMoodLineChart extends StatelessWidget {
           '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
       final n = counts[k];
       if (n == null || n == 0) continue;
-      samples.add(MoodDaySample(
-        dayIndex: i,
-        date: d,
-        moodAvg: sums[k]! / n,
-      ));
+      samples.add(MoodDaySample(dayIndex: i, date: d, moodAvg: sums[k]! / n));
     }
     samples.sort((a, b) => a.dayIndex.compareTo(b.dayIndex));
     return samples;
@@ -131,11 +124,7 @@ class PixelMoodLineChart extends StatelessWidget {
   Widget _header() {
     return Row(
       children: [
-        const PixelIcon(
-          icon: PixelIcons.chart,
-          size: 16,
-          color: AppTheme.primary,
-        ),
+        PixelIcon(icon: PixelIcons.chart, size: 16, color: AppTheme.primary),
         const SizedBox(width: 8),
         Text('近 30 天心情', style: AppTextStyle.label),
       ],
@@ -370,10 +359,7 @@ class _MoodTrendPainter extends CustomPainter {
       )..layout();
       tp.paint(
         canvas,
-        Offset(
-          (plotRect.left - tp.width) / 2,
-          y - tp.height / 2,
-        ),
+        Offset((plotRect.left - tp.width) / 2, y - tp.height / 2),
       );
     }
 

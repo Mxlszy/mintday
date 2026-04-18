@@ -34,7 +34,7 @@ class LocalImagePreview extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.image_outlined, color: AppTheme.textHint),
+          Icon(Icons.image_outlined, color: AppTheme.textHint),
           const SizedBox(height: AppTheme.spacingXS),
           Text(
             path.basename(imagePath),
@@ -51,9 +51,6 @@ class LocalImagePreview extends StatelessWidget {
       return preview;
     }
 
-    return GestureDetector(
-      onTap: onTap,
-      child: preview,
-    );
+    return GestureDetector(onTap: onTap, child: preview);
   }
 }

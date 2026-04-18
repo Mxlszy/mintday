@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 class StorageService {
   static const bool supportsPersistentImages = false;
 
@@ -9,5 +11,13 @@ class StorageService {
 
   static Future<List<String>> saveImages(List<String> tempPaths) async {
     return const [];
+  }
+
+  static Future<String?> saveBytes(
+    Uint8List bytes, {
+    String folderName = 'generated_assets',
+    String extension = 'png',
+  }) async {
+    return null;
   }
 }

@@ -1,0 +1,28 @@
+Launching lib\main.dart on sdk gphone64 x86 64 in debug mode...
+Running Gradle task 'assembleDebug'...                              4.2s
+√ Built build\app\outputs\flutter-apk\app-debug.apk
+Installing build\app\outputs\flutter-apk\app-debug.apk...          604ms
+D/FlutterJNI(10647): Beginning load of flutter...
+D/FlutterJNI(10647): flutter (null) was loaded normally!
+I/flutter (10647): [IMPORTANT:flutter/shell/platform/android/android_context_gl_impeller.cc(104)] Using the Impeller rendering backend (OpenGLES).
+D/FlutterRenderer(10647): Width is zero. 0,0
+D/FlutterRenderer(10647): Width is zero. 0,0
+D/FlutterJNI(10647): Sending viewport metrics to the engine.
+Syncing files to device sdk gphone64 x86 64...                     106ms
+
+Flutter run key commands.
+r Hot reload. 
+R Hot restart.
+h List all available interactive commands.
+d Detach (terminate "flutter run" but leave application running).
+c Clear the screen
+q Quit (terminate the application on the device).
+
+A Dart VM Service on sdk gphone64 x86 64 is available at: http://127.0.0.1:63104/ra9BKGlx8Aw=/
+The Flutter DevTools debugger and profiler on sdk gphone64 x86 64 is available at: http://127.0.0.1:63104/ra9BKGlx8Aw=/devtools/?uri=ws://127.0.0.1:63104/ra9BKGlx8Aw=/ws
+I/Choreographer(10647): Skipped 30 frames!  The application may be doing too much work on its main thread.
+D/WindowLayoutComponentImpl(10647): Register WindowLayoutInfoListener on Context=com.mintday.mintday.MainActivity@5c6bb9d, of which baseContext=android.app.ContextImpl@2b2c155
+D/FlutterJNI(10647): Sending viewport metrics to the engine.
+I/Choreographer(10647): Skipped 35 frames!  The application may be doing too much work on its main thread.
+D/ProfileInstaller(10647): Installing profile for com.mintday.mintday
+Lost connection to device.

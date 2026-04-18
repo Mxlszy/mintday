@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -55,5 +56,34 @@ class StorageService {
       }
     }
     return results;
+  }
+
+  static Future<String?> saveBytes(
+    Uint8List bytes, {
+    String folderName = 'generated_assets',
+    String extension = 'png',
+  }) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final targetDir = Directory(path.join(appDir.path, folderName));
+      if (!targetDir.existsSync()) {
+        targetDir.createSync(recursive: true);
+      }
+
+      final fileName = '${_uuid.v4()}.$extension';
+      final destinationPath = path.join(targetDir.path, fileName);
+      final file = File(destinationPath);
+      await file.writeAsBytes(bytes, flush: true);
+      log('[StorageService] 字节文件保存: $destinationPath', name: 'StorageService');
+      return destinationPath;
+    } catch (e, s) {
+      log(
+        '[StorageService] 字节文件保存失败: $e',
+        name: 'StorageService',
+        error: e,
+        stackTrace: s,
+      );
+      return null;
+    }
   }
 }

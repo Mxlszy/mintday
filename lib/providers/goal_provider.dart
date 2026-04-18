@@ -32,7 +32,12 @@ class GoalProvider extends ChangeNotifier {
       log('[GoalProvider] 加载目标: ${_goals.length} 条', name: 'GoalProvider');
     } catch (e, s) {
       _error = '加载失败，请重试';
-      log('[GoalProvider] 加载失败: $e', name: 'GoalProvider', error: e, stackTrace: s);
+      log(
+        '[GoalProvider] 加载失败: $e',
+        name: 'GoalProvider',
+        error: e,
+        stackTrace: s,
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -47,6 +52,7 @@ class GoalProvider extends ChangeNotifier {
     String? vision,
     DateTime? deadline,
     List<String> steps = const [],
+    bool isPublic = false,
   }) async {
     try {
       final now = DateTime.now();
@@ -62,7 +68,10 @@ class GoalProvider extends ChangeNotifier {
         status: GoalStatus.active,
         createdAt: now,
         updatedAt: now,
+        isMintable: true,
         seasonId: SeasonRollingUtils.seasonIdAt(now),
+        isPublic: isPublic,
+        reward: '达成里程碑后可铸造成专属 NFT 纪念卡',
       );
 
       await DatabaseService.insertGoal(goal);
@@ -71,13 +80,43 @@ class GoalProvider extends ChangeNotifier {
       log('[GoalProvider] 创建目标: ${goal.title}', name: 'GoalProvider');
       return goal;
     } catch (e, s) {
-      log('[GoalProvider] 创建目标失败: $e',
-          name: 'GoalProvider', error: e, stackTrace: s);
+      log(
+        '[GoalProvider] 创建目标失败: $e',
+        name: 'GoalProvider',
+        error: e,
+        stackTrace: s,
+      );
       return null;
     }
   }
 
   /// 更新子步骤完成状态
+  Future<bool> updateGoal(Goal goal) async {
+    final index = _goals.indexWhere((item) => item.id == goal.id);
+    if (index == -1) return false;
+
+    final previous = _goals[index];
+    final updated = goal.copyWith(updatedAt: DateTime.now());
+    _goals[index] = updated;
+    notifyListeners();
+
+    try {
+      await DatabaseService.updateGoal(updated);
+      log('[GoalProvider] 更新目标: ${updated.title}', name: 'GoalProvider');
+      return true;
+    } catch (e, s) {
+      _goals[index] = previous;
+      notifyListeners();
+      log(
+        '[GoalProvider] 更新目标失败: $e',
+        name: 'GoalProvider',
+        error: e,
+        stackTrace: s,
+      );
+      return false;
+    }
+  }
+
   Future<void> toggleStep(String goalId, int stepIndex) async {
     final index = _goals.indexWhere((g) => g.id == goalId);
     if (index == -1) return;
